@@ -3,7 +3,7 @@
 // Type-only imports keep server code out of the client bundle.
 
 import type { ErrorBody, FieldErrors } from "@/lib/api/errors";
-import type { ConsultationDTO } from "@/lib/services/consultation-dto";
+import type { AdminConsultationDTO, ConsultationDTO } from "@/lib/services/consultation-dto";
 import type {
   CreateConsultationInput,
   RescheduleConsultationInput,
@@ -23,7 +23,11 @@ export class ApiClientError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: { method: string; body?: unknown }): Promise<T> {
+/** The whole success body: `{ data }`, plus `nextCursor` on the admin list. */
+async function requestBody<B extends { data: unknown }>(
+  path: string,
+  init?: { method: string; body?: unknown },
+): Promise<B> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -37,7 +41,7 @@ async function request<T>(path: string, init?: { method: string; body?: unknown 
     throw new ApiClientError(0, "network_error", "Could not reach the server. Check your connection and try again.");
   }
 
-  const body = (await res.json().catch(() => null)) as ({ data: T } & Partial<ErrorBody>) | null;
+  const body = (await res.json().catch(() => null)) as (B & Partial<ErrorBody>) | null;
   if (!res.ok || !body || !("data" in body)) {
     const error = body?.error;
     throw new ApiClientError(
@@ -47,7 +51,11 @@ async function request<T>(path: string, init?: { method: string; body?: unknown 
       error?.fields,
     );
   }
-  return body.data;
+  return body;
+}
+
+async function request<T>(path: string, init?: { method: string; body?: unknown }): Promise<T> {
+  return (await requestBody<{ data: T }>(path, init)).data;
 }
 
 export const consultationsApi = {
@@ -70,4 +78,17 @@ export const consultationsApi = {
 
   cancel: (id: string) =>
     request<ConsultationDTO>(`/api/consultations/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
+};
+
+/** One page of the admin list; `nextCursor` is null on the last page. */
+export type AdminConsultationPage = { data: AdminConsultationDTO[]; nextCursor: string | null };
+
+export const adminConsultationsApi = {
+  list: ({ cursor, limit }: { cursor?: string; limit?: number } = {}) => {
+    const query = new URLSearchParams();
+    if (cursor !== undefined) query.set("cursor", cursor);
+    if (limit !== undefined) query.set("limit", String(limit));
+    const qs = query.toString();
+    return requestBody<AdminConsultationPage>(`/api/admin/consultations${qs ? `?${qs}` : ""}`);
+  },
 };

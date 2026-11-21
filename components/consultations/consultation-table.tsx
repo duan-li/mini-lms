@@ -1,17 +1,17 @@
 "use client";
 
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDateTime } from "@/lib/datetime";
 import { useConsultations, useSetCompleted } from "@/lib/queries/consultations";
 import type { ConsultationDTO } from "@/lib/services/consultation-dto";
-import { type ConsultationStatus, allowedActions } from "@/lib/services/consultation-rules";
+import { allowedActions } from "@/lib/services/consultation-rules";
 import { cn } from "@/lib/utils";
 import { CancelDialog } from "./cancel-dialog";
 import { RescheduleDialog } from "./reschedule-dialog";
+import { StatusBadge } from "./status-badge";
 
 const COLUMNS = 5;
 
@@ -123,19 +123,5 @@ function ConsultationRow({
         </div>
       </TableCell>
     </TableRow>
-  );
-}
-
-const STATUS: Record<ConsultationStatus, { label: string; className: string }> = {
-  scheduled: { label: "Scheduled", className: "border-blue-500/40 text-blue-700 dark:text-blue-300" },
-  completed: { label: "Completed", className: "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-300" },
-  cancelled: { label: "Cancelled", className: "text-muted-foreground" },
-};
-
-function StatusBadge({ status }: { status: ConsultationStatus }) {
-  return (
-    <Badge variant="outline" className={STATUS[status].className}>
-      {STATUS[status].label}
-    </Badge>
   );
 }
