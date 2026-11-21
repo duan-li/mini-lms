@@ -10,6 +10,8 @@ import { useConsultations, useSetCompleted } from "@/lib/queries/consultations";
 import type { ConsultationDTO } from "@/lib/services/consultation-dto";
 import { type ConsultationStatus, allowedActions } from "@/lib/services/consultation-rules";
 import { cn } from "@/lib/utils";
+import { CancelDialog } from "./cancel-dialog";
+import { RescheduleDialog } from "./reschedule-dialog";
 
 const COLUMNS = 5;
 
@@ -116,6 +118,8 @@ function ConsultationRow({
       <TableCell>
         <div className="flex items-center justify-end gap-2">
           <StatusBadge status={consultation.status} />
+          {actions.reschedule && <RescheduleDialog userId={userId} consultation={consultation} />}
+          {actions.cancel && <CancelDialog userId={userId} consultation={consultation} />}
         </div>
       </TableCell>
     </TableRow>

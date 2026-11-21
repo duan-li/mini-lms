@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import { BookingDialog } from "@/components/consultations/booking-dialog";
 import { ConsultationTable } from "@/components/consultations/consultation-table";
 import { getViewer } from "@/lib/auth/viewer";
 
@@ -31,6 +32,7 @@ async function StudentDashboard() {
           <h1 className="text-2xl font-bold">My consultations</h1>
           <p className="text-sm text-muted-foreground">Times are shown in your browser&apos;s time zone.</p>
         </div>
+        <BookingDialog userId={viewer.id} />
       </div>
       <ConsultationTable userId={viewer.id} />
     </>
