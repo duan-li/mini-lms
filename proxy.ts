@@ -1,6 +1,10 @@
 import { updateSession } from "@/lib/supabase/proxy";
 import { type NextRequest } from "next/server";
 
+// Refreshes the Supabase session cookie and redirects signed-out visitors
+// from pages to the login screen. It is not an authorization layer: pages
+// check the session and role themselves, Route Handlers check them again
+// (withStudent / withAdmin), and RLS checks every row.
 export async function proxy(request: NextRequest) {
   return await updateSession(request);
 }

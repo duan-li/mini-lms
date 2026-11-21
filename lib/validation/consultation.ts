@@ -1,6 +1,7 @@
 import { z } from "zod";
+import { localInputToIso } from "@/lib/datetime";
 
-// Shared by the API and (from M4) the forms, so this file must stay free of
+// Shared by the API and the forms, so this file must stay free of
 // server-only imports. Input types come from z.infer: no separate input DTOs.
 
 const name = (label: string) =>
@@ -62,6 +63,32 @@ export const updateConsultationSchema = z
         ? { scheduledAt: body.scheduledAt }
         : { completed: body.completed! },
   );
+
+// Form schemas: the API schemas with `scheduledAt` taken from a
+// `datetime-local` input. The value is converted to ISO with the browser's
+// offset, then checked by the same `futureDateTime` rule the API uses.
+
+const localDateTime = z
+  .string({ error: "Date and time are required" })
+  .min(1, "Date and time are required")
+  .transform((value, ctx) => {
+    const iso = localInputToIso(value);
+    if (iso === null) {
+      ctx.addIssue({ code: "custom", message: "Enter a valid date and time" });
+      return z.NEVER;
+    }
+    return iso;
+  })
+  .pipe(futureDateTime);
+
+/** Booking dialog. Output is exactly the POST body. */
+export const bookingFormSchema = createConsultationSchema.extend({ scheduledAt: localDateTime });
+
+/** Reschedule dialog. Output is exactly the PATCH body. */
+export const rescheduleFormSchema = z.object({ scheduledAt: localDateTime });
+
+export type BookingFormValues = z.input<typeof bookingFormSchema>;
+export type RescheduleFormValues = z.input<typeof rescheduleFormSchema>;
 
 export const ADMIN_PAGE_SIZE = { default: 20, max: 100 } as const;
 
