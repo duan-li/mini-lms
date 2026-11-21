@@ -22,6 +22,7 @@ export default defineConfig({
           // Files run one at a time so tests that share the database do not race.
           name: "integration",
           include: ["tests/integration/**/*.test.ts"],
+          globalSetup: ["tests/integration/global-setup.ts"],
           fileParallelism: false,
           testTimeout: 20_000,
         },
