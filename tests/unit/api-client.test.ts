@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiClientError, consultationsApi } from "@/lib/api/client";
+import { ApiClientError, adminConsultationsApi, consultationsApi } from "@/lib/api/client";
 
 function mockFetch(status: number, body: unknown) {
   const fetchMock = vi.fn(async () =>
@@ -63,5 +63,32 @@ describe("consultationsApi", () => {
   it("reports a network failure as status 0", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
     await expect(consultationsApi.list()).rejects.toMatchObject({ status: 0, code: "network_error" });
+  });
+});
+
+describe("adminConsultationsApi", () => {
+  it("returns the whole page, nextCursor included", async () => {
+    mockFetch(200, { data: [{ id: "1" }], nextCursor: "abc" });
+    await expect(adminConsultationsApi.list()).resolves.toEqual({ data: [{ id: "1" }], nextCursor: "abc" });
+  });
+
+  it("asks for the first page without a query string", async () => {
+    const fetchMock = mockFetch(200, { data: [], nextCursor: null });
+    await adminConsultationsApi.list();
+    expect(fetchMock).toHaveBeenCalledWith("/api/admin/consultations", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("sends the cursor and page size, encoded", async () => {
+    const fetchMock = mockFetch(200, { data: [], nextCursor: null });
+    await adminConsultationsApi.list({ cursor: "a+b/c=", limit: 5 });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/consultations?cursor=a%2Bb%2Fc%3D&limit=5",
+      expect.anything(),
+    );
+  });
+
+  it("throws the API's error, such as 403 for a student", async () => {
+    mockFetch(403, { error: { code: "forbidden", message: "Admins only." } });
+    await expect(adminConsultationsApi.list()).rejects.toMatchObject({ status: 403, code: "forbidden" });
   });
 });

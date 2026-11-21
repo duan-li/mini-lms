@@ -27,6 +27,7 @@ About five minutes, after [Setup](#setup). Seed accounts share the password `pas
 6. Tick **Done** on A's seeded "Catch-up on last week's lab", marked *(past)*: past bookings can still be completed.
 7. Log out. `/dashboard` now redirects to the login page, and `curl -i http://localhost:3000/api/consultations` returns 401.
 8. Log in as `student.b@example.com` in the same browser. None of A's bookings appear, not even while the page loads.
+9. Log out and log in as `admin@example.com`. It lands on `/admin`, and the header shows an **Admin** link (students never see it). All of A's and B's bookings appear, including B's cancelled one, with each student's name and ID and no edit controls. The admin's own "Booked before promotion to admin" is read-only too. Open `/admin?limit=3` to page through them three at a time with **Load more**.
 
 Times are entered and shown in the browser's time zone and stored in UTC. Run `npx supabase db reset` to start again from the seed.
 
@@ -116,6 +117,8 @@ Local sign-up does **not** need email confirmation (`enable_confirmations = fals
 | `npm run test:unit` | Unit tests only; no database needed |
 | `npm run test:integration` | Database integration tests; local Supabase must be running |
 | `npm run test:api` | API tests over HTTP; local Supabase must be running, and the tests build and start their own app |
+| `npm run test:coverage` | All Vitest projects with v8 coverage; fails below 90% line or branch coverage of `lib/services` and `lib/validation` |
+| `npm run test:e2e` | Playwright browser tests; local Supabase must be running, and the tests build and start their own app on port 3200 |
 | `npm run db:types` | Regenerate `lib/database.types.ts` from the local database |
 
 ## API
@@ -166,6 +169,15 @@ curl -i http://localhost:3000/api/consultations
 - The forms use the same zod schemas as the API. A `datetime-local` value has no time zone, so it is sent as ISO 8601 with the browser's offset.
 - `proxy.ts` only refreshes the session and redirects signed-out visitors away from pages. It is not an authorization layer.
 
+## Admin view
+
+`/admin` is a Server Component: signed out goes to the login page, and a student goes to `/dashboard`. The table is a Client Component that reads `GET /api/admin/consultations`, so `withAdmin` and RLS check the role again.
+
+- Every booking, cancelled ones included, ordered by consultation time, with the student's name and ID and a status badge. No checkbox, button or link changes a booking. The API returns 403 to an admin on any student route, and RLS has no admin write policy, so the admin's own pre-promotion booking is read-only as well.
+- **Load more** fetches the next page with `nextCursor`, 20 rows at a time; `?limit=` (1 to 100) changes the page size, using the API's own validation.
+- Each page is cached under `['admin-consultations', userId, cursor, { limit }]`. Each page's cursor comes from the page before it as it is now, so if page one is refetched and now ends on a different row, page two moves with it and no row is skipped.
+- The **Admin** link in the header is shown only to admins. It is a convenience, not a guard.
+
 ## Tests
 
 | Suite | What it proves |
@@ -173,8 +185,12 @@ curl -i http://localhost:3000/api/consultations
 | `tests/integration/rls.test.ts` | A student reads and changes only their own rows; another student's row is left unchanged; the admin reads every row, including its own pre-promotion booking, and can write none; no one can change a role or `student_id` |
 | `tests/integration/db-rules.test.ts` | Complete, mark incomplete, reschedule and cancel follow the state rules; a repeat complete changes nothing; past bookings can be completed but not moved to the past; rescheduling and cancelling free a time |
 | `tests/integration/concurrency.test.ts` | The same booking sent twice at once leaves one active row; two students can book the same time |
-| `tests/unit/*.test.ts` | zod schemas (API and forms), the state rules, row-to-DTO mapping, the admin cursor, error-to-status mapping, and the auth wrapper with every way Supabase Auth can answer (rejected token: 401; outage, network error or rate limit: 500); for the UI: `datetime-local` to ISO with offset in any time zone, the fetch client's error handling, query keys carrying the user ID, when the cache is cleared, and the optimistic row |
+| `tests/integration/services.test.ts` | The service layer called directly with a signed-in student's or admin's client, as a Route Handler calls it: every use case and every error (conflict, illegal state, past time, someone else's row, a malformed ID, a database error), reading past the 1,000-row cap, and admin paging where two bookings at the same time land on different pages |
+| `tests/unit/*.test.ts` | zod schemas (API and forms), the state rules, row-to-DTO mapping, the admin cursor, error-to-status mapping, and the auth wrapper with every way Supabase Auth can answer (rejected token: 401; outage, network error or rate limit: 500); for the UI: `datetime-local` to ISO with offset in any time zone, the fetch client's error handling, query keys carrying the user ID, when the cache is cleared, the optimistic row, and the admin list (page keys, the cursor chain, same-time rows on different pages) |
 | `tests/api/api.test.ts` | Every status code above over HTTP with real session cookies: 401 signed out, 403 for the wrong role, 404 for another student's booking, 409 for a double booking (also two identical requests at once: one 201, one 409), 422 for illegal changes; admin paging where two bookings at the same time land on different pages; one booking taken through book, complete, mark incomplete, reschedule and cancel; a student with 1,005 bookings gets all of them; an Auth outage gives a signed-in caller 500, not 401 |
+| `tests/e2e/student-flow.spec.ts` | Playwright: sign up, book, complete and mark incomplete, reschedule and rebook the old time, a refused duplicate, cancel and rebook, complete a past booking, then log out (redirect and 401) |
+| `tests/e2e/account-switch.spec.ts` | Playwright: after A logs out and B logs in on the same page, A's booking is never visible, checked after every DOM change |
+| `tests/e2e/admin.spec.ts` | Playwright: a student is sent away from `/admin`; the admin pages through every booking one row per page, two same-time bookings land on different pages and both appear, and the table has no edit controls |
 
 Integration tests run against local Supabase, so run `npx supabase start` first. They create fresh users for each test and delete them afterwards, so they do not depend on the seed. The keys come from `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` if set, otherwise from `npx supabase status`. The secret key is used only by the tests, to create users; the app never uses it.
 
@@ -194,6 +210,20 @@ API_TEST_SKIP_BUILD=1 npm run test:api   # reuse the last build when only tests 
 API_TEST_PORT=3200 npm run test:api      # if port 3100 is taken (the proxy then uses 3201)
 ```
 
+### Coverage
+
+`npm run test:coverage` measures `lib/services` and `lib/validation` with the v8 provider and fails below 90% lines or branches. Measured: **100% lines (101/101) and 100% branches (60/60)**, from 255 Vitest tests. The report is written to `coverage/` (open `coverage/index.html`). The API tests call a separate server process, so the service integration tests are what cover the service layer.
+
+### End-to-end tests
+
+```bash
+npx playwright install chromium   # once
+npm run test:e2e                  # builds into .next-e2e, starts on :3200, runs, stops
+E2E_SKIP_BUILD=1 npm run test:e2e # reuse the last build when only tests changed
+```
+
+The browser runs in UTC with the `en-US` locale, so the tests can work out the times they type. Test users are made with the secret key in the test process only; the app under test gets the public URL and key.
+
 ## Continuous integration
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request: install, lint, typecheck, start local Supabase, `db reset`, check the generated types, then all the tests, including the API tests against their own build of the app.
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push and pull request: install, lint, typecheck, start local Supabase, `db reset`, check the generated types, then every Vitest project with the coverage gate (the API tests against their own build of the app), then the Playwright tests. The coverage report is uploaded as an artifact, and so is the Playwright report when a browser test fails.

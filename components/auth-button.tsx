@@ -8,6 +8,12 @@ export async function AuthButton() {
 
   return viewer ? (
     <div className="flex items-center gap-4">
+      {/* A convenience only: /admin and its API check the role themselves. */}
+      {viewer.role === "admin" && (
+        <Link href="/admin" className="font-medium underline-offset-4 hover:underline">
+          Admin
+        </Link>
+      )}
       <span className="hidden text-muted-foreground sm:inline">{viewer.email}</span>
       <LogoutButton />
     </div>
