@@ -15,6 +15,21 @@ Every package version, including the Supabase CLI, is pinned by `package-lock.js
 
 Versions used: Next.js 16.4.6, React 19, `@supabase/ssr` 0.12, `@supabase/supabase-js` 2.119, Supabase CLI 3.2, Postgres 17, zod 4, Vitest 5.
 
+## Review path
+
+About five minutes, after [Setup](#setup). Seed accounts share the password `password123` (see [Seed accounts](#seed-accounts)). T1 and T2 are any two future times, for example tomorrow at 10:00 and 11:00.
+
+1. Complete [Setup](#setup), then open http://localhost:3000. Signed out, it goes to the login page.
+2. Sign up a new account at `/auth/sign-up`. Local sign-up needs no email confirmation, so it lands straight on an empty dashboard.
+3. Log out and log in as `student.a@example.com`. Book T1 with **Book a consultation**. Tick its **Done** box to mark it complete, then untick it to mark it incomplete.
+4. **Reschedule** it from T1 to T2. While T2 is still active, book T1 again: it succeeds, so rescheduling freed T1. Booking T2 a second time is refused with "You already have a consultation at this time."
+5. **Cancel** the T2 booking and confirm, then book T2 again: it succeeds, so cancelling freed T2. The cancelled row stays in the list, struck through.
+6. Tick **Done** on A's seeded "Catch-up on last week's lab", marked *(past)*: past bookings can still be completed.
+7. Log out. `/dashboard` now redirects to the login page, and `curl -i http://localhost:3000/api/consultations` returns 401.
+8. Log in as `student.b@example.com` in the same browser. None of A's bookings appear, not even while the page loads.
+
+Times are entered and shown in the browser's time zone and stored in UTC. Run `npx supabase db reset` to start again from the seed.
+
 ## Setup
 
 ```bash
@@ -88,7 +103,7 @@ Every trigger stays on while seeding, so each seeded row passed the same rules a
 
 ## Accounts and email
 
-Local sign-up does **not** need email confirmation (`enable_confirmations = false` in `supabase/config.toml`). After signing up at `/auth/sign-up` the account is signed in straight away, even though the page says to check your email. Emails the app does send (such as password resets) land in Mailpit at http://127.0.0.1:54324.
+Local sign-up does **not** need email confirmation (`enable_confirmations = false` in `supabase/config.toml`). After signing up at `/auth/sign-up` the account is signed in straight away and lands on its dashboard. (With confirmations on, as on a hosted project, it shows a "check your email" page instead.) Emails the app does send (such as password resets) land in Mailpit at http://127.0.0.1:54324.
 
 ## Scripts
 
@@ -141,6 +156,16 @@ Errors are logged as one JSON line with the request ID, route, user ID and error
 curl -i http://localhost:3000/api/consultations
 ```
 
+## Student dashboard
+
+`/dashboard` is a Server Component: it checks the session and role before anything renders (signed out: login page; an admin: `/admin`). The table and dialogs are Client Components that use only the API above, through TanStack Query.
+
+- The list is cached under `['consultations', userId]`, and the cache is cleared on sign-out or when a different user signs in (not on a token refresh), so one student's data never reaches the next person on a shared computer.
+- Ticking **Done** updates the row at once; if the API refuses, the row goes back and the API's message is shown. The list is refetched after every change, so the server's state wins.
+- Only the actions the state allows are shown: reschedule and cancel for scheduled bookings, the **Done** box for scheduled and completed ones, nothing for cancelled ones.
+- The forms use the same zod schemas as the API. A `datetime-local` value has no time zone, so it is sent as ISO 8601 with the browser's offset.
+- `proxy.ts` only refreshes the session and redirects signed-out visitors away from pages. It is not an authorization layer.
+
 ## Tests
 
 | Suite | What it proves |
@@ -148,7 +173,7 @@ curl -i http://localhost:3000/api/consultations
 | `tests/integration/rls.test.ts` | A student reads and changes only their own rows; another student's row is left unchanged; the admin reads every row, including its own pre-promotion booking, and can write none; no one can change a role or `student_id` |
 | `tests/integration/db-rules.test.ts` | Complete, mark incomplete, reschedule and cancel follow the state rules; a repeat complete changes nothing; past bookings can be completed but not moved to the past; rescheduling and cancelling free a time |
 | `tests/integration/concurrency.test.ts` | The same booking sent twice at once leaves one active row; two students can book the same time |
-| `tests/unit/*.test.ts` | zod schemas, the state rules, row-to-DTO mapping, the admin cursor, error-to-status mapping, and the auth wrapper with every way Supabase Auth can answer (rejected token: 401; outage, network error or rate limit: 500) |
+| `tests/unit/*.test.ts` | zod schemas (API and forms), the state rules, row-to-DTO mapping, the admin cursor, error-to-status mapping, and the auth wrapper with every way Supabase Auth can answer (rejected token: 401; outage, network error or rate limit: 500); for the UI: `datetime-local` to ISO with offset in any time zone, the fetch client's error handling, query keys carrying the user ID, when the cache is cleared, and the optimistic row |
 | `tests/api/api.test.ts` | Every status code above over HTTP with real session cookies: 401 signed out, 403 for the wrong role, 404 for another student's booking, 409 for a double booking (also two identical requests at once: one 201, one 409), 422 for illegal changes; admin paging where two bookings at the same time land on different pages; one booking taken through book, complete, mark incomplete, reschedule and cancel; a student with 1,005 bookings gets all of them; an Auth outage gives a signed-in caller 500, not 401 |
 
 Integration tests run against local Supabase, so run `npx supabase start` first. They create fresh users for each test and delete them afterwards, so they do not depend on the seed. The keys come from `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` if set, otherwise from `npx supabase status`. The secret key is used only by the tests, to create users; the app never uses it.
