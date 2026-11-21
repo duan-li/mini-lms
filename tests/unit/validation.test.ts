@@ -31,6 +31,12 @@ describe("createConsultationSchema", () => {
     expect(parsed.reason).toBe("Essay");
   });
 
+  it("checks the year after applying the offset", () => {
+    expect(rescheduleConsultationSchema.safeParse({ scheduledAt: "9999-12-31T23:59:59Z" }).success).toBe(true);
+    expect(fieldErrors(createConsultationSchema, { ...valid, scheduledAt: "9999-12-31T23:59:59-01:00" }).scheduledAt)
+      .toContain("Consultation time must be within UTC year 9999");
+  });
+
   it("normalises the time to UTC", () => {
     const local = new Date(Date.now() + 86_400_000);
     local.setUTCSeconds(0, 0);

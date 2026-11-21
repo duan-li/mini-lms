@@ -100,6 +100,7 @@ The schema lives only in SQL migrations under `supabase/migrations`, applied in 
 | `consultations` | `consultations` table, check constraints, the double-booking unique index, list indexes, `updated_at` trigger |
 | `consultation_rules` | State trigger (legal changes only, future time on create or reschedule, completion and cancel times set by the database) and column-level grants |
 | `rls_policies` | Students read and write their own rows; admins read all rows and write none |
+| `consultation_time_range` | Restricts new and rescheduled times to UTC years 1–9999, preserving existing booking history |
 
 ```bash
 npx supabase db reset   # drop the local database, apply every migration, then supabase/seed.sql
@@ -276,22 +277,22 @@ curl -i http://localhost:3000/api/consultations
 
 ## Tests
 
-Measured on the fresh clone, 22 Nov 2026. All pass locally and in CI.
+Measured locally on 22 Nov 2026 after the email-confirmation and booking-time fixes. The merged M6 baseline also passed [CI](https://github.com/duan-li/mini-lms/actions/runs/44952201051).
 
 | Suite | Tests | What it proves |
 | --- | --- | --- |
-| Unit (`tests/unit`, 11 files) | 130 | zod schemas (API and forms), the state rules, row-to-DTO mapping, the admin cursor, error-to-status mapping, the auth wrapper with every way Supabase Auth can answer (rejected token: 401; outage, network error or rate limit: 500), `datetime-local` to ISO with offset in any time zone, the fetch client, query keys carrying the user ID, when the cache is cleared, the optimistic row, and the admin page chain |
+| Unit (`tests/unit`, 12 files) | 140 | zod schemas (API and forms), the state rules, row-to-DTO mapping, the admin cursor (including legacy times), email confirmation destinations, error-to-status mapping, the auth wrapper with every way Supabase Auth can answer (rejected token: 401; outage, network error or rate limit: 500), `datetime-local` to ISO with offset in any time zone, the fetch client, query keys carrying the user ID, when the cache is cleared, the optimistic row, and the admin page chain |
 | `tests/integration/rls.test.ts` | 21 | A student reads and changes only their own rows; another student's row is left unchanged; the admin reads every row, including its own pre-promotion booking, and can write none; no one can change a role or `student_id`, set state columns on insert, or delete |
-| `tests/integration/db-rules.test.ts` | 29 | Check constraints; past times rejected; complete, mark incomplete, reschedule and cancel follow the state rules; a repeat complete changes nothing; past bookings can be completed but not moved to the past; rescheduling and cancelling free a time |
+| `tests/integration/db-rules.test.ts` | 30 | Check constraints; past times rejected; complete, mark incomplete, reschedule and cancel follow the state rules; a repeat complete changes nothing; past bookings can be completed but not moved to the past; rescheduling and cancelling free a time |
 | `tests/integration/concurrency.test.ts` | 2 | The same booking sent twice at once leaves one active row; two students can book the same time |
 | `tests/integration/services.test.ts` | 24 | The service layer called with a signed-in student's or admin's client: every use case and error, reading past the 1,000-row cap, and admin paging where two same-time bookings land on different pages |
 | `tests/api/api.test.ts` | 49 | Every status code over HTTP with real session cookies, including two identical requests at once (one 201, one 409); one booking taken through book, complete, mark incomplete, reschedule and cancel; a student with 1,005 bookings gets all of them; an Auth outage gives 500, not 401 |
-| **Vitest total** | **255** | 16 files |
+| **Vitest total** | **266** | 17 files |
 | `tests/e2e/student-flow.spec.ts` | 1 | Playwright: review path steps 2 to 7 (sign up, book, complete and mark incomplete, reschedule and rebook, a refused duplicate, cancel and rebook, complete a past booking, log out: redirect and 401) |
 | `tests/e2e/account-switch.spec.ts` | 1 | Playwright: after A logs out and B logs in on the same page, A's booking is never visible, checked after every DOM change |
 | `tests/e2e/admin.spec.ts` | 2 | Playwright: a student is sent away from `/admin` and sees no Admin link; the admin pages through every booking one row per page, same-time bookings both appear, and there are no edit controls |
 
-**Coverage** (`npm run test:coverage`, v8 provider, `lib/services` and `lib/validation`): **100% lines (101/101), 100% branches (60/60), 100% functions (27/27)**. CI fails below 90% lines or branches. The report is written to `coverage/index.html`. The API tests call a separate server process, so the service integration tests are what cover the service layer.
+**Coverage** (`npm run test:coverage`, v8 provider, `lib/services` and `lib/validation`): **100% lines (107/107), 100% branches (62/62), 100% functions (29/29)**. CI fails below 90% lines or branches. The report is written to `coverage/index.html`. The API tests call a separate server process, so the service integration tests are what cover the service layer.
 
 **Database rules**: every RLS policy, trigger and column grant has at least one test that is allowed and one that is refused, and so do the length checks and the double-booking index. The check that a booking cannot be both completed and cancelled is a backstop: the state trigger refuses that update first, and the test for it asserts the trigger's error.
 

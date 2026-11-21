@@ -10,6 +10,11 @@ describe("cursor", () => {
     expect(decodeCursor(encodeCursor(cursor))).toEqual(cursor);
   });
 
+  it.each(["infinity", "10000-01-01T00:00:00.123456+00:00"])("round-trips a legacy database time %s", (scheduledAt) => {
+    const legacy = { scheduledAt, id };
+    expect(decodeCursor(encodeCursor(legacy))).toEqual(legacy);
+  });
+
   it("is URL-safe", () => {
     expect(encodeCursor(cursor)).toMatch(/^[A-Za-z0-9_-]+$/);
   });

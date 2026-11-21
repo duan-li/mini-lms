@@ -37,6 +37,8 @@ export function isoToLocalInput(iso: string | Date): string {
 
 /** How a consultation time is shown: the browser's locale and time zone. */
 export function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return "Time unavailable";
   return new Intl.DateTimeFormat(undefined, {
     weekday: "short",
     day: "numeric",
@@ -44,5 +46,5 @@ export function formatDateTime(iso: string): string {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  }).format(new Date(iso));
+  }).format(date);
 }
