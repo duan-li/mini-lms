@@ -14,7 +14,8 @@ export type TestUser = {
 };
 
 const env = inject("supabase");
-const PASSWORD = "integration-test-password";
+/** Every test user shares this password. */
+export const TEST_PASSWORD = "integration-test-password";
 
 function makeClient(key: string): Db {
   return createClient<Database>(env.url, key, {
@@ -37,14 +38,14 @@ export async function createStudent(label = "student"): Promise<TestUser> {
   const email = `${label}-${randomUUID()}@example.com`;
   const { data, error } = await service.auth.admin.createUser({
     email,
-    password: PASSWORD,
+    password: TEST_PASSWORD,
     email_confirm: true,
   });
   if (error) throw error;
   createdUserIds.push(data.user.id);
 
   const client = anonClient();
-  const signIn = await client.auth.signInWithPassword({ email, password: PASSWORD });
+  const signIn = await client.auth.signInWithPassword({ email, password: TEST_PASSWORD });
   if (signIn.error) throw signIn.error;
 
   return { id: data.user.id, email, client };

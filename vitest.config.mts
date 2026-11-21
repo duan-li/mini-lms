@@ -27,6 +27,19 @@ export default defineConfig({
           testTimeout: 20_000,
         },
       },
+      {
+        extends: true,
+        test: {
+          // HTTP tests against a real Next.js server. The global setup builds
+          // the app and starts it on port 3100; local Supabase must be running.
+          name: "api",
+          include: ["tests/api/**/*.test.ts"],
+          globalSetup: ["tests/api/global-setup.ts"],
+          fileParallelism: false,
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
+        },
+      },
     ],
   },
 });
