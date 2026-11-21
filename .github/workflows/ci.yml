@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Only the services the app and tests use: Postgres, Auth, PostgREST, Kong, Mailpit, pg-meta.
+      - name: Start local Supabase
+        run: npx supabase start -x studio,imgproxy,storage-api,edge-runtime,logflare,vector,realtime,supavisor
+
+      - name: Reset database (migrations + seed)
+        run: npx supabase db reset
+
+      # Local Supabase keys are fixed, public development values.
+      - name: Export Supabase environment
+        run: |
+          npx supabase status -o env \
+            --override-name api.url=NEXT_PUBLIC_SUPABASE_URL \
+            --override-name auth.publishable_key=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
+            | grep '^NEXT_PUBLIC_' | sed 's/"//g' >> "$GITHUB_ENV"
+
+      - name: Test
+        run: npm test
