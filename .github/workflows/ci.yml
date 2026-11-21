@@ -54,6 +54,16 @@ jobs:
             | grep '^NEXT_PUBLIC_' | sed 's/"//g' >> "$GITHUB_ENV"
 
       # Integration tests read the secret key from `supabase status` themselves,
-      # so it never enters the shared job environment.
-      - name: Test
-        run: npm test
+      # so it never enters the shared job environment. Every project runs, and
+      # the run fails below 90% line or branch coverage of lib/services and
+      # lib/validation (thresholds in vitest.config.mts).
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          if-no-files-found: ignore

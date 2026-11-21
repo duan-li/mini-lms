@@ -12,6 +12,16 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // `npm run test:coverage` (and CI): v8 coverage of the rules and the
+    // validation, from the unit and integration tests. The API tests call a
+    // separate server process, so they add nothing here. Below 90% lines or
+    // branches, the run fails.
+    coverage: {
+      provider: "v8",
+      include: ["lib/services/**/*.ts", "lib/validation/**/*.ts"],
+      reporter: ["text", "json-summary", "html"],
+      thresholds: { lines: 90, branches: 90 },
+    },
     projects: [
       {
         extends: true,
