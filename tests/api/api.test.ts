@@ -112,6 +112,30 @@ describe("GET /api/consultations", () => {
     expect(first.status).toBe("scheduled");
   });
 
+  it("returns every booking, past the API's 1,000-row limit per request", async () => {
+    const student = await apiStudent("many");
+    const count = 1_005;
+    const start = Date.parse(bookingBody(24).scheduledAt);
+    // Inserted in one go with the service role; the state trigger still runs.
+    const rows = Array.from({ length: count }, (_, i) => ({
+      student_id: student.id,
+      first_name: "Many",
+      last_name: "Bookings",
+      reason: "Row limit test",
+      scheduled_at: new Date(start + i * 60_000).toISOString(),
+    }));
+    const { error } = await service.from("consultations").insert(rows);
+    expect(error).toBeNull();
+
+    const res = await student.api.list();
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(count);
+    expect(new Set(res.body.data.map((c) => c.id)).size).toBe(count);
+    const times = res.body.data.map((c) => Date.parse(c.scheduledAt));
+    expect(times).toEqual(rows.map((r) => Date.parse(r.scheduled_at)));
+  });
+
   it("sends Cache-Control: private, no-store", async () => {
     expect((await a.api.list()).headers.get("cache-control")).toBe("private, no-store");
   });

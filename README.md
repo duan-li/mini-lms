@@ -130,6 +130,8 @@ Success is `{ "data": ... }`; the admin list adds `"nextCursor"`, which is `null
 | 422 | A change the current state does not allow, such as cancelling a completed booking |
 | 500 | Unexpected error, with a generic message. This includes Supabase Auth being unreachable: a signed-in user is not told to sign in again because of an outage |
 
+The student list returns every booking. PostgREST caps each response at 1,000 rows (`max_rows` in `supabase/config.toml`) without raising an error, so the service reads in keyset pages until it has the total the database reported.
+
 A repeat of `{ completed }` with the state the booking already has returns 200 and changes nothing. A second cancel returns 422, because cancel is an action, not a target state.
 
 Errors are logged as one JSON line with the request ID, route, user ID and error class. Logs never hold the request body (it carries the consultation reason), cookies or tokens. The request ID is also returned in the `X-Request-Id` header.
@@ -147,7 +149,7 @@ curl -i http://localhost:3000/api/consultations
 | `tests/integration/db-rules.test.ts` | Complete, mark incomplete, reschedule and cancel follow the state rules; a repeat complete changes nothing; past bookings can be completed but not moved to the past; rescheduling and cancelling free a time |
 | `tests/integration/concurrency.test.ts` | The same booking sent twice at once leaves one active row; two students can book the same time |
 | `tests/unit/*.test.ts` | zod schemas, the state rules, row-to-DTO mapping, the admin cursor, error-to-status mapping, and the auth wrapper with every way Supabase Auth can answer (rejected token: 401; outage, network error or rate limit: 500) |
-| `tests/api/api.test.ts` | Every status code above over HTTP with real session cookies: 401 signed out, 403 for the wrong role, 404 for another student's booking, 409 for a double booking (also two identical requests at once: one 201, one 409), 422 for illegal changes; admin paging where two bookings at the same time land on different pages; one booking taken through book, complete, mark incomplete, reschedule and cancel; an Auth outage gives a signed-in caller 500, not 401 |
+| `tests/api/api.test.ts` | Every status code above over HTTP with real session cookies: 401 signed out, 403 for the wrong role, 404 for another student's booking, 409 for a double booking (also two identical requests at once: one 201, one 409), 422 for illegal changes; admin paging where two bookings at the same time land on different pages; one booking taken through book, complete, mark incomplete, reschedule and cancel; a student with 1,005 bookings gets all of them; an Auth outage gives a signed-in caller 500, not 401 |
 
 Integration tests run against local Supabase, so run `npx supabase start` first. They create fresh users for each test and delete them afterwards, so they do not depend on the seed. The keys come from `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` if set, otherwise from `npx supabase status`. The secret key is used only by the tests, to create users; the app never uses it.
 

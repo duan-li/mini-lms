@@ -28,18 +28,60 @@ import type {
 // query runs under that user's RLS policies; tests can pass a client signed in
 // as any role. Services return DTOs, never raw rows, and throw typed errors.
 
+/**
+ * Rows per request. PostgREST caps every response at `max_rows` (1,000 in
+ * supabase/config.toml), and silently: the cap is not an error. The list
+ * below never relies on a page being "full", so a lower cap is still safe.
+ */
+const LIST_PAGE_SIZE = 1_000;
+
 /** The caller's own consultations by consultation time, cancelled ones included. */
 export async function listConsultations(db: Db, userId: string): Promise<ConsultationDTO[]> {
-  // Filter by student_id explicitly rather than relying on RLS alone; it also
-  // matches the (student_id, scheduled_at, id) index.
-  const { data, error } = await db
+  // Keyset pages on (scheduled_at, id), so rows never repeat. The first page
+  // also asks for the total; reading stops once that many rows are in, or at
+  // an empty page (rows deleted meanwhile). Most students need one request.
+  const first = await ownPage(db, userId, undefined);
+  const total = first.count;
+  const rows = first.rows;
+  let last = rows.at(-1);
+  while (last && rows.length < total) {
+    const next = await ownPage(db, userId, last);
+    rows.push(...next.rows);
+    last = next.rows.at(-1);
+  }
+  return rows.map(toConsultationDTO);
+}
+
+/** One page of the caller's rows after `after`; the first page also carries the total. */
+async function ownPage(
+  db: Db,
+  userId: string,
+  after: ConsultationRecord | undefined,
+): Promise<{ rows: ConsultationRecord[]; count: number }> {
+  // Filter by student_id explicitly rather than relying on RLS alone; it
+  // also matches the (student_id, scheduled_at, id) index.
+  let request = db
     .from("consultations")
-    .select(CONSULTATION_COLUMNS)
+    .select(CONSULTATION_COLUMNS, after ? undefined : { count: "exact" })
     .eq("student_id", userId)
     .order("scheduled_at", { ascending: true })
-    .order("id", { ascending: true });
+    .order("id", { ascending: true })
+    .limit(LIST_PAGE_SIZE);
+  if (after) request = request.or(afterFilter(after.scheduled_at, after.id));
+
+  const { data, error, count } = await request;
   if (error) throw fromDbError(error);
-  return data.map(toConsultationDTO);
+  return { rows: data, count: count ?? 0 };
+}
+
+/**
+ * PostgREST filter for rows strictly after (scheduled_at, id). The time keeps
+ * Postgres's own text (microseconds included) and is quoted, as it holds ':'
+ * and '+'. Both values come from the database or a validated cursor.
+ */
+function afterFilter(scheduledAt: string, id: string): string {
+  const at = `"${scheduledAt}"`;
+  return `scheduled_at.gt.${at},and(scheduled_at.eq.${at},id.gt.${id})`;
 }
 
 /** Books a consultation. It starts as scheduled; the database sets student_id. */
@@ -114,10 +156,7 @@ export async function listAllConsultations(db: Db, query: AdminListQuery): Promi
   if (query.cursor !== undefined) {
     const cursor = decodeCursor(query.cursor);
     if (!cursor) throw new ValidationError("Invalid input", { cursor: ["Invalid cursor"] });
-    // Rows strictly after (scheduled_at, id). Both values are validated: a
-    // timestamp and a UUID. The timestamp is quoted because it holds ':' and '+'.
-    const at = `"${cursor.scheduledAt}"`;
-    request = request.or(`scheduled_at.gt.${at},and(scheduled_at.eq.${at},id.gt.${cursor.id})`);
+    request = request.or(afterFilter(cursor.scheduledAt, cursor.id));
   }
 
   const { data, error } = await request;
