@@ -10,6 +10,7 @@ import {
   apiAdmin,
   apiStudent,
   bookingBody,
+  duringAuthOutage,
 } from "./http";
 
 // Every row of the API column in the design's Test coverage table, over HTTP
@@ -46,6 +47,32 @@ describe("signed out", () => {
   it("an invalid session cookie is still 401", async () => {
     const forged = new Api("sb-127-auth-token=base64-eyJmb3JnZWQiOnRydWV9");
     expectError(await forged.list(), 401, "unauthenticated");
+  });
+});
+
+describe("Supabase Auth unavailable", () => {
+  it("a signed-in caller gets a generic 500, not 401 'Please sign in'", async () => {
+    const student = await apiStudent();
+
+    const [list, booking] = await duringAuthOutage(() =>
+      Promise.all([student.api.list(), student.api.book(bookingBody(24))]),
+    );
+
+    for (const res of [list, booking]) {
+      expectError(res, 500, "internal_error");
+      expect((res.body as unknown as ErrorBody).error.message).toBe("Something went wrong. Please try again.");
+      expect(res.headers.get("cache-control")).toBe("private, no-store");
+    }
+    // Nothing was written, and the same cookies work once Auth is back.
+    const after = await student.api.list();
+    expect(after.status).toBe(200);
+    expect(after.body.data).toEqual([]);
+  });
+
+  it("a signed-out caller is still 401 during the outage (no session to check)", async () => {
+    await duringAuthOutage(async () => {
+      expectError(await anonymous.list(), 401, "unauthenticated");
+    });
   });
 });
 

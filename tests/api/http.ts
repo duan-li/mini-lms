@@ -3,7 +3,10 @@ import { inject } from "vitest";
 import type { AdminConsultationDTO, ConsultationDTO } from "@/lib/services/consultation-dto";
 import { TEST_PASSWORD, type TestUser, createAdmin, createStudent } from "../integration/helpers";
 
+import { AUTH_OUTAGE_PATH } from "./supabase-proxy";
+
 const baseUrl = inject("apiBaseUrl");
+const supabaseProxyUrl = inject("supabaseProxyUrl");
 const supabase = inject("supabase");
 
 export type ApiUser = TestUser & { api: Api };
@@ -111,4 +114,17 @@ export function bookingBody(hours: number, change: Record<string, unknown> = {})
     scheduledAt: at.toISOString(),
     ...change,
   };
+}
+
+/**
+ * Runs `fn` while Supabase Auth's user endpoint answers 503 to the app.
+ * Tests in a file run one at a time, so no other test sees the outage.
+ */
+export async function duringAuthOutage<T>(fn: () => Promise<T>): Promise<T> {
+  await fetch(`${supabaseProxyUrl}${AUTH_OUTAGE_PATH}`, { method: "PUT" });
+  try {
+    return await fn();
+  } finally {
+    await fetch(`${supabaseProxyUrl}${AUTH_OUTAGE_PATH}`, { method: "DELETE" });
+  }
 }

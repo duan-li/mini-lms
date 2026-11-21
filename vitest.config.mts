@@ -3,7 +3,12 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
-    alias: { "@": fileURLToPath(new URL(".", import.meta.url)) },
+    alias: {
+      "@": fileURLToPath(new URL(".", import.meta.url)),
+      // Vitest is not a React Server Components bundler, so the marker package
+      // would throw on import. Tests may load server-only modules directly.
+      "server-only": fileURLToPath(new URL("node_modules/server-only/empty.js", import.meta.url)),
+    },
   },
   test: {
     environment: "node",

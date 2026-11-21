@@ -123,12 +123,12 @@ Success is `{ "data": ... }`; the admin list adds `"nextCursor"`, which is `null
 | --- | --- |
 | 200 / 201 | Success / created |
 | 400 | Invalid input, with field errors; a past time; a malformed body or cursor |
-| 401 | Not signed in |
+| 401 | Not signed in, or Supabase Auth rejects the session |
 | 403 | A student on the admin route, or an admin on any student route |
 | 404 | No such consultation, or someone else's |
 | 409 | The same student already has a booking at that time |
 | 422 | A change the current state does not allow, such as cancelling a completed booking |
-| 500 | Unexpected error, with a generic message |
+| 500 | Unexpected error, with a generic message. This includes Supabase Auth being unreachable: a signed-in user is not told to sign in again because of an outage |
 
 A repeat of `{ completed }` with the state the booking already has returns 200 and changes nothing. A second cancel returns 422, because cancel is an action, not a target state.
 
@@ -146,15 +146,15 @@ curl -i http://localhost:3000/api/consultations
 | `tests/integration/rls.test.ts` | A student reads and changes only their own rows; another student's row is left unchanged; the admin reads every row, including its own pre-promotion booking, and can write none; no one can change a role or `student_id` |
 | `tests/integration/db-rules.test.ts` | Complete, mark incomplete, reschedule and cancel follow the state rules; a repeat complete changes nothing; past bookings can be completed but not moved to the past; rescheduling and cancelling free a time |
 | `tests/integration/concurrency.test.ts` | The same booking sent twice at once leaves one active row; two students can book the same time |
-| `tests/unit/*.test.ts` | zod schemas, the state rules, row-to-DTO mapping, the admin cursor, and error-to-status mapping |
-| `tests/api/api.test.ts` | Every status code above over HTTP with real session cookies: 401 signed out, 403 for the wrong role, 404 for another student's booking, 409 for a double booking (also two identical requests at once: one 201, one 409), 422 for illegal changes; admin paging where two bookings at the same time land on different pages; one booking taken through book, complete, mark incomplete, reschedule and cancel |
+| `tests/unit/*.test.ts` | zod schemas, the state rules, row-to-DTO mapping, the admin cursor, error-to-status mapping, and the auth wrapper with every way Supabase Auth can answer (rejected token: 401; outage, network error or rate limit: 500) |
+| `tests/api/api.test.ts` | Every status code above over HTTP with real session cookies: 401 signed out, 403 for the wrong role, 404 for another student's booking, 409 for a double booking (also two identical requests at once: one 201, one 409), 422 for illegal changes; admin paging where two bookings at the same time land on different pages; one booking taken through book, complete, mark incomplete, reschedule and cancel; an Auth outage gives a signed-in caller 500, not 401 |
 
 Integration tests run against local Supabase, so run `npx supabase start` first. They create fresh users for each test and delete them afterwards, so they do not depend on the seed. The keys come from `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` if set, otherwise from `npx supabase status`. The secret key is used only by the tests, to create users; the app never uses it.
 
 **API tests** run against a real Next.js server. Their global setup (`tests/api/global-setup.ts`):
 
 1. builds the app into `.next-test` (not `.next`, so a running `npm run dev` is left alone),
-2. starts it with `next start` on port 3100, passing it only the public Supabase URL and key,
+2. starts it with `next start` on port 3100, passing it only the public Supabase URL and key. The app reaches Supabase through a small pass-through proxy on port 3101, which tests can switch into an Auth outage to check that it returns 500 rather than 401,
 3. waits until `GET /api/consultations` answers 401,
 4. stops only that process when the tests finish.
 
@@ -164,7 +164,7 @@ Each test signs in with `@supabase/ssr` on an in-memory cookie store and sends t
 npx supabase start             # once; the tests do not start Supabase
 npm run test:api               # builds, starts the app on :3100, runs the tests, stops it
 API_TEST_SKIP_BUILD=1 npm run test:api   # reuse the last build when only tests changed
-API_TEST_PORT=3200 npm run test:api      # if port 3100 is taken
+API_TEST_PORT=3200 npm run test:api      # if port 3100 is taken (the proxy then uses 3201)
 ```
 
 ## Continuous integration

@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { User } from "@supabase/supabase-js";
+import { type AuthError, type User, isAuthApiError, isAuthSessionMissingError } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import { ApiError, Forbidden, NO_STORE, Unauthorized, fromDbError, toErrorResponse } from "@/lib/api/errors";
 import { createClient, type Db } from "@/lib/supabase/server";
@@ -28,11 +28,7 @@ export function withAuth<P = Record<string, never>>(handler: Handler<P>, role?: 
     let response: Response;
     try {
       const supabase = await createClient();
-      // getUser() checks the token with Supabase Auth; getSession() would not.
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Unauthorized();
+      const user = await verifiedUser(supabase);
       userId = user.id;
       if (role) await requireRole(supabase, role);
       response = await handler({ req, supabase, user, params });
@@ -54,6 +50,37 @@ export function withStudent<P = Record<string, never>>(handler: Handler<P>): Rou
 /** Admin routes: a student gets 403. */
 export function withAdmin<P = Record<string, never>>(handler: Handler<P>): RouteHandler<P> {
   return withAuth(handler, "admin");
+}
+
+/**
+ * The signed-in user, checked with Supabase Auth. getUser() verifies the
+ * token with the Auth server; getSession() would not.
+ *
+ * A missing session, or a token Auth rejects, is a 401. Any other failure
+ * (Auth down, a network error, rate limiting) is our problem, not the
+ * caller's: it becomes a 500, so a signed-in user is not told to sign in.
+ */
+async function verifiedUser(supabase: Db): Promise<User> {
+  const { data, error } = await supabase.auth.getUser();
+  if (data.user) return data.user;
+  if (!error || isAuthSessionMissingError(error) || isRejectedToken(error)) throw new Unauthorized();
+  throw new AuthUnavailable(error);
+}
+
+/** Auth answered 4xx (bad or expired token, user or session gone); 429 is not a verdict on the token. */
+function isRejectedToken(error: AuthError): boolean {
+  return isAuthApiError(error) && error.status >= 400 && error.status < 500 && error.status !== 429;
+}
+
+/** Supabase Auth could not answer. Keeps the class and code for the log, never the message. */
+export class AuthUnavailable extends Error {
+  override name = "AuthUnavailable";
+  readonly code: string;
+
+  constructor(cause: AuthError) {
+    super("Supabase Auth could not verify the session");
+    this.code = cause.code ?? `${cause.name}:${cause.status ?? "?"}`;
+  }
 }
 
 /** Roles live in profiles.role; is_admin() reads it for the signed-in user. */
