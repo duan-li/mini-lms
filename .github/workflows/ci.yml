@@ -36,6 +36,15 @@ jobs:
       - name: Reset database (migrations + seed)
         run: npx supabase db reset
 
+      # The committed types must match the migrations.
+      - name: Check generated database types
+        run: |
+          npx supabase gen types typescript > "$RUNNER_TEMP/database.types.ts"
+          if ! diff -u lib/database.types.ts "$RUNNER_TEMP/database.types.ts"; then
+            echo "::error file=lib/database.types.ts::Out of date. Run \`npm run db:types\` and commit the result."
+            exit 1
+          fi
+
       # Local Supabase keys are fixed, public development values.
       - name: Export Supabase environment
         run: |
@@ -44,5 +53,7 @@ jobs:
             --override-name auth.publishable_key=NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY \
             | grep '^NEXT_PUBLIC_' | sed 's/"//g' >> "$GITHUB_ENV"
 
+      # Integration tests read the secret key from `supabase status` themselves,
+      # so it never enters the shared job environment.
       - name: Test
         run: npm test
