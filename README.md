@@ -38,11 +38,11 @@ Versions used: Next.js 16.4.6, React 19, `@supabase/ssr` 0.12, `@supabase/supaba
 
 ## Review path
 
-About five minutes, after [Setup](#setup). Seed accounts share the password `password123` (see [Seed accounts](#seed-accounts)). T1 and T2 are any two future times, for example tomorrow at 10:00 and 11:00.
+About five minutes, after [Setup](#setup). Seed accounts share the password `password123` (see [Seed accounts](#seed-accounts)).
 
 1. Complete [Setup](#setup), then open http://localhost:3000. Signed out, it goes to the login page.
 2. Sign up a new account at `/auth/sign-up`. Local sign-up needs no email confirmation, so it lands straight on an empty dashboard.
-3. Log out and log in as `student.a@example.com`. Book T1 with **Book a consultation**. Tick its **Done** box to mark it complete, then untick it to mark it incomplete.
+3. Log out and log in as `student.a@example.com`. On A’s dashboard, choose two distinct future times that are free for A. Call them T1 and T2. After a fresh reset, 10:00 and 11:00 one week from today will both be free in your local time zone. Book T1 with **Book a consultation**. Tick its **Done** box to mark it complete, then untick it to mark it incomplete.
 4. **Reschedule** it from T1 to T2. While T2 is still active, book T1 again: it succeeds, so rescheduling freed T1. Booking T2 a second time is refused with "You already have a consultation at this time."
 5. **Cancel** the T2 booking and confirm, then book T2 again: it succeeds, so cancelling freed T2. The cancelled row stays in the list, struck through.
 6. Tick **Done** on A's seeded "Catch-up on last week's lab", marked *(past)*: past bookings can still be completed.
