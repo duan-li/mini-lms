@@ -4,8 +4,10 @@ import { InvalidState, NotFound, ValidationError, fromDbError, parseId } from "@
 import type { Db } from "@/lib/supabase/server";
 import {
   CONSULTATION_COLUMNS,
+  type AdminConsultationDTO,
   type ConsultationDTO,
   type ConsultationRecord,
+  toAdminConsultationDTO,
   toConsultationDTO,
 } from "@/lib/services/consultation-dto";
 import {
@@ -15,7 +17,12 @@ import {
   decideSetCompleted,
   statusOf,
 } from "@/lib/services/consultation-rules";
-import type { CreateConsultationInput, UpdateConsultationInput } from "@/lib/validation/consultation";
+import { decodeCursor, encodeCursor } from "@/lib/services/cursor";
+import type {
+  AdminListQuery,
+  CreateConsultationInput,
+  UpdateConsultationInput,
+} from "@/lib/validation/consultation";
 
 // Use cases. Each takes the caller's session client and user ID, so every
 // query runs under that user's RLS policies; tests can pass a client signed in
@@ -86,6 +93,41 @@ export async function cancelConsultation(db: Db, userId: string, id: string): Pr
   apply(decideCancel(statusOf(row)));
   // The database replaces this time with now().
   return toConsultationDTO(await write(db, userId, id, { cancelled_at: new Date().toISOString() }));
+}
+
+export type AdminPage = { data: AdminConsultationDTO[]; nextCursor: string | null };
+
+/**
+ * Every consultation, ordered by (scheduled_at, id), one page at a time. The
+ * admin select policy decides what is visible; the route's withAdmin decides
+ * who may call this.
+ */
+export async function listAllConsultations(db: Db, query: AdminListQuery): Promise<AdminPage> {
+  let request = db
+    .from("consultations")
+    .select(CONSULTATION_COLUMNS)
+    .order("scheduled_at", { ascending: true })
+    .order("id", { ascending: true })
+    // One extra row tells whether another page exists.
+    .limit(query.limit + 1);
+
+  if (query.cursor !== undefined) {
+    const cursor = decodeCursor(query.cursor);
+    if (!cursor) throw new ValidationError("Invalid input", { cursor: ["Invalid cursor"] });
+    // Rows strictly after (scheduled_at, id). Both values are validated: a
+    // timestamp and a UUID. The timestamp is quoted because it holds ':' and '+'.
+    const at = `"${cursor.scheduledAt}"`;
+    request = request.or(`scheduled_at.gt.${at},and(scheduled_at.eq.${at},id.gt.${cursor.id})`);
+  }
+
+  const { data, error } = await request;
+  if (error) throw fromDbError(error);
+
+  const page = data.slice(0, query.limit);
+  const last = page.at(-1);
+  const nextCursor =
+    data.length > query.limit && last ? encodeCursor({ scheduledAt: last.scheduled_at, id: last.id }) : null;
+  return { data: page.map(toAdminConsultationDTO), nextCursor };
 }
 
 /** The caller's own row; someone else's row is a 404, so its existence is not revealed. */
