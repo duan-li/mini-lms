@@ -1,6 +1,11 @@
+import type { Database } from "@/lib/database.types";
 import { env } from "@/lib/env";
 import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+
+/** A Supabase client typed with the generated schema. */
+export type Db = SupabaseClient<Database>;
 
 /**
  * Especially important if using Fluid compute: Don't put this client in a
@@ -10,7 +15,7 @@ import { cookies } from "next/headers";
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createServerClient(
+  return createServerClient<Database>(
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
