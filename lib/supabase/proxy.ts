@@ -41,9 +41,12 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
+  // Page redirects only. API routes answer for themselves (401 from withAuth),
+  // so a script or fetch gets a status code rather than a login page.
   if (
     request.nextUrl.pathname !== "/" &&
     !user &&
+    !request.nextUrl.pathname.startsWith("/api/") &&
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/auth")
   ) {

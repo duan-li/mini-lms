@@ -35,9 +35,8 @@ function readSupabaseStatus(): Record<string, string> {
   return values;
 }
 
-// The secret key stays in the test process: it is used only to create users
-// and to read rows as they really are, never by the app.
-export default function setup(project: TestProject) {
+/** Supabase URL and keys from the environment, else from `npx supabase status`. */
+export function resolveSupabaseEnv(): SupabaseTestEnv {
   const fromEnv = {
     url: process.env.NEXT_PUBLIC_SUPABASE_URL,
     publishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
@@ -54,5 +53,11 @@ export default function setup(project: TestProject) {
   for (const [name, value] of Object.entries(env)) {
     if (!value) throw new Error(`Integration tests: could not find the Supabase ${name}.`);
   }
-  project.provide("supabase", env);
+  return env;
+}
+
+// The secret key stays in the test process: it is used only to create users
+// and to read rows as they really are, never by the app.
+export default function setup(project: TestProject) {
+  project.provide("supabase", resolveSupabaseEnv());
 }
