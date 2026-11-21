@@ -23,7 +23,27 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "profiles": {
+            "consultations": {
+                  Row: {
+                    "cancelled_at": string | null,"completed_at": string | null,"created_at": string,"first_name": string,"id": string,"last_name": string,"reason": string,"scheduled_at": string,"student_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "cancelled_at"?: string | null,"completed_at"?: string | null,"created_at"?: string,"first_name": string,"id"?: string,"last_name": string,"reason": string,"scheduled_at": string,"student_id"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "cancelled_at"?: string | null,"completed_at"?: string | null,"created_at"?: string,"first_name"?: string,"id"?: string,"last_name"?: string,"reason"?: string,"scheduled_at"?: string,"student_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "consultations_student_id_fkey"
+      columns: ["student_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"profiles": {
                   Row: {
                     "created_at": string,"id": string,"role": Database["public"]['Enums']["app_role"]
                   }
