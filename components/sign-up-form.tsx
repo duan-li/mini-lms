@@ -40,15 +40,17 @@ export function SignUpForm({
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/protected`,
+          emailRedirectTo: `${window.location.origin}/dashboard`,
         },
       });
       if (error) throw error;
-      router.push("/auth/sign-up-success");
+      // Without email confirmation (the local default) the account is
+      // signed in at once, so it goes straight to its dashboard.
+      router.push(data.session ? "/dashboard" : "/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
