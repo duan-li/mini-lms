@@ -19,6 +19,7 @@ const name = (label: string) =>
 export const futureDateTime = z
   .iso.datetime({ offset: true, error: "Must be a date and time with a time zone offset" })
   .refine((value) => new Date(value).getTime() > Date.now(), "Must be in the future")
+  .refine((value) => new Date(value).getUTCFullYear() <= 9999, "Consultation time must be within UTC year 9999")
   .transform((value) => new Date(value).toISOString());
 
 /** POST /api/consultations. Unknown keys (`student_id`, `role`, …) are dropped. */

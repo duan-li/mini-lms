@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isoToLocalInput, localInputToIso } from "@/lib/datetime";
+import { formatDateTime, isoToLocalInput, localInputToIso } from "@/lib/datetime";
 
 // Written to pass in any time zone the tests run in (CI is UTC; laptops are not).
 
@@ -40,5 +40,13 @@ describe("isoToLocalInput", () => {
     const date = new Date(Date.UTC(2030, 0, 2, 3, 4));
     expect(isoToLocalInput(date.toISOString())).toBe(isoToLocalInput(date));
     expect(isoToLocalInput(date)).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  });
+});
+
+describe("formatDateTime", () => {
+  it("renders a fallback for legacy times the browser cannot display", () => {
+    expect(formatDateTime("infinity")).toBe("Time unavailable");
+    expect(formatDateTime("294276-01-01T00:00:00+00:00")).toBe("Time unavailable");
+    expect(formatDateTime("2030-01-01T10:00:00Z")).toContain("2030");
   });
 });

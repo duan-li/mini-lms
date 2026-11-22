@@ -48,6 +48,17 @@ describe("booking", () => {
     expectDatabaseNow(row.created_at);
   });
 
+  it("enforces the UTC year range on both insert and reschedule", async () => {
+    const latest = "9999-12-31T23:59:59Z";
+    const row = await book(student, latest);
+    for (const time of ["10000-01-01T00:00:00Z", "infinity"]) {
+      const insert = await student.client.from("consultations").insert(bookingInput(time));
+      expectErrorCode(insert.error, ERR.check);
+      expectErrorCode((await reschedule(row.id, time)).error, ERR.check);
+    }
+    expect(sameInstant((await readRow(row.id)).scheduled_at, latest)).toBe(true);
+  });
+
   it("a booking in the past is rejected", async () => {
     const { error } = await student.client.from("consultations").insert(bookingInput(hoursFromNow(-1)));
 

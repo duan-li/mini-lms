@@ -7,12 +7,24 @@ import { z } from "zod";
 
 export type Cursor = { scheduledAt: string; id: string };
 
+// Pre-range-migration rows may contain PostgreSQL's positive infinity or an
+// extended UTC year. Preserve the exact sort key when paging over their rows.
+const legacyTimestamp = z.string().regex(/^[1-9]\d{4,5}-/).refine((value) => {
+  const yearEnd = value.indexOf("-");
+  const year = Number(value.slice(0, yearEnd));
+  // ISO validators expect four digits. A 400-year cycle preserves leap days.
+  const calendarYear = 2000 + year % 400;
+  return year <= 294276 && z.iso.datetime({ offset: true }).safeParse(calendarYear + value.slice(yearEnd)).success;
+});
+
 const cursorSchema = z.object({
   // Timestamp characters only: the value is placed inside a PostgREST filter.
   s: z
     .string()
     .regex(/^[0-9T:.+\- Z]+$/)
-    .refine((value) => !Number.isNaN(Date.parse(value))),
+    .refine((value) => !Number.isNaN(Date.parse(value)))
+    .or(z.literal("infinity"))
+    .or(legacyTimestamp),
   i: z.uuid(),
 });
 
